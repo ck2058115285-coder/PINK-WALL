@@ -172,8 +172,31 @@ $this->need('header.php');
             ); ?>
         </div>
     <?php else: ?>
+        <!-- 首页滚动加载状态 -->
+        <div class="infinite-scroll-status" id="infinite-scroll-status">
+            <div class="infinite-scroll-spinner"></div>
+            <span>正在加载更多照片...</span>
+        </div>
+        <!-- 隐藏的首页分页导航，供 JS 读取 -->
+        <div id="index-pagination" style="display: none;">
+            <?php $this->pageNav(
+                '&laquo;', 
+                '&raquo;', 
+                1, 
+                '...', 
+                array(
+                    'wrapTag' => 'div',
+                    'wrapClass' => 'pagination',
+                    'itemTag' => 'span',
+                    'textTag' => 'span',
+                    'currentClass' => 'page-current',
+                    'prevClass' => 'page-btn prev',
+                    'nextClass' => 'page-btn next'
+                )
+            ); ?>
+        </div>
         <!-- 首页到底提示 -->
-        <div class="page-end-tip" style="text-align: center; padding: 40px 0 60px 0; color: var(--text-muted); font-size: 0.95rem; letter-spacing: 2px;">
+        <div class="page-end-tip" id="page-end-tip" style="text-align: center; padding: 40px 0 60px 0; color: var(--text-muted); font-size: 0.95rem; letter-spacing: 2px; <?php echo ($this->_currentPage == ceil($this->total / $this->parameter->pageSize)) ? '' : 'display: none;'; ?>">
             <?php _e('别滑了，没有了'); ?>
         </div>
     <?php endif; ?>

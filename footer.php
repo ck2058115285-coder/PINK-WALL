@@ -40,6 +40,19 @@
     </div>
 </div>
 
+<?php if ($this->options->showCopyrightProtect == '1'): ?>
+<!-- 版权保护提示弹窗 HTML -->
+<div id="copyright-toast" class="copyright-toast" role="alert">
+    <div class="copyright-toast-icon">
+        <svg style="width: 20px; height: 20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+    </div>
+    <span class="copyright-toast-text"><?php echo $this->options->copyrightNotice ? htmlspecialchars($this->options->copyrightNotice, ENT_QUOTES, 'UTF-8') : 'RK 版权所有，未经授权请勿转载或保存图片。'; ?></span>
+</div>
+<?php endif; ?>
+
 <!-- Typecho 系统底部挂载 -->
 <?php $this->footer(); ?>
 
@@ -62,30 +75,31 @@ document.addEventListener('DOMContentLoaded', function() {
     const lightboxImg = document.getElementById('lightbox-img');
     const lightboxTitle = document.getElementById('lightbox-title');
     const lightboxDesc = document.getElementById('lightbox-desc');
-    const cardLinks = document.querySelectorAll('.card-link');
     
     let currentGalleryLinks = [];
     let currentGalleryIndex = 0;
 
-    cardLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            
-            // 查找同一个卡片 (例如同一个 grid-item 或 gallery-card-wrapper) 中的所有图片链接
-            const parentCard = this.closest('.grid-item') || this.closest('.gallery-card-wrapper');
-            if (parentCard) {
-                currentGalleryLinks = Array.from(parentCard.querySelectorAll('.card-link'));
-            } else {
-                currentGalleryLinks = [this];
-            }
-            
-            currentGalleryIndex = currentGalleryLinks.indexOf(this);
-            if (currentGalleryIndex === -1) {
-                currentGalleryIndex = 0;
-            }
-            
-            openLightbox();
-        });
+    // 使用事件委托，确保动态加载的卡片也能正常触发 Lightbox
+    document.addEventListener('click', function(e) {
+        const link = e.target.closest('.card-link');
+        if (!link) return;
+        
+        e.preventDefault();
+        
+        // 查找同一个卡片 (例如同一个 grid-item 或 gallery-card-wrapper) 中的所有图片链接
+        const parentCard = link.closest('.grid-item') || link.closest('.gallery-card-wrapper');
+        if (parentCard) {
+            currentGalleryLinks = Array.from(parentCard.querySelectorAll('.card-link'));
+        } else {
+            currentGalleryLinks = [link];
+        }
+        
+        currentGalleryIndex = currentGalleryLinks.indexOf(link);
+        if (currentGalleryIndex === -1) {
+            currentGalleryIndex = 0;
+        }
+        
+        openLightbox();
     });
 
     function openLightbox() {
@@ -181,15 +195,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // === 3. 图片惰性加载 (Lazy Load) 与渐显过渡 ===
     const lazyImages = document.querySelectorAll('img.lazy');
-    
-    // 给所有惰性图片设置初始状态样式
-    lazyImages.forEach(img => {
-        img.style.opacity = '0';
-        img.style.transition = 'opacity 0.6s ease';
-    });
+    let lazyImageObserver;
 
     if ('IntersectionObserver' in window) {
-        const lazyImageObserver = new IntersectionObserver(function(entries, observer) {
+        lazyImageObserver = new IntersectionObserver(function(entries, observer) {
             entries.forEach(function(entry) {
                 if (entry.isIntersecting) {
                     const lazyImage = entry.target;
@@ -213,13 +222,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         });
+    }
 
-        lazyImages.forEach(function(lazyImage) {
-            lazyImageObserver.observe(lazyImage);
-        });
-    } else {
-        // 浏览器不支持观察器时的降级 fallback
-        lazyImages.forEach(img => {
+    function setupLazyLoadForElement(img) {
+        img.style.opacity = '0';
+        img.style.transition = 'opacity 0.6s ease';
+        if (lazyImageObserver) {
+            lazyImageObserver.observe(img);
+        } else {
             img.onload = function() {
                 img.style.opacity = '1';
                 const wrapper = img.closest('.card-img-wrapper');
@@ -235,8 +245,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             };
             img.src = img.dataset.src;
-        });
+        }
     }
+
+    // 给所有初始图片绑定惰性加载
+    lazyImages.forEach(img => {
+        setupLazyLoadForElement(img);
+    });
 
     // === 4. 网站运行时间动态计算 ===
     const runTimeDisplay = document.getElementById('run-time-display');
@@ -408,6 +423,123 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
+
+    // === 6. 首页 AJAX 滚动自适应加载更多 ===
+    const scrollStatus = document.getElementById('infinite-scroll-status');
+    const indexPagination = document.getElementById('index-pagination');
+    const pageEndTip = document.getElementById('page-end-tip');
+    const grid = document.querySelector('.waterfall-grid');
+    
+    if (scrollStatus && indexPagination && grid) {
+        let isLoading = false;
+        
+        if ('IntersectionObserver' in window) {
+            const scrollObserver = new IntersectionObserver(function(entries) {
+                const entry = entries[0];
+                if (entry.isIntersecting && !isLoading) {
+                    loadMorePosts();
+                }
+            }, { rootMargin: '150px' });
+            
+            scrollObserver.observe(scrollStatus);
+        } else {
+            window.addEventListener('scroll', function() {
+                if (isLoading) return;
+                const rect = scrollStatus.getBoundingClientRect();
+                if (rect.top < window.innerHeight + 150) {
+                    loadMorePosts();
+                }
+            });
+        }
+        
+        function loadMorePosts() {
+            const nextLink = indexPagination.querySelector('.next a') || indexPagination.querySelector('a.next');
+            if (!nextLink) {
+                scrollStatus.classList.remove('active');
+                if (pageEndTip) pageEndTip.style.display = 'block';
+                return;
+            }
+            
+            isLoading = true;
+            scrollStatus.classList.add('active');
+            if (pageEndTip) pageEndTip.style.display = 'none';
+            
+            const nextUrl = nextLink.href;
+            
+            fetch(nextUrl)
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.text();
+                })
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    const newItems = doc.querySelectorAll('.waterfall-grid .grid-item');
+                    if (newItems.length > 0) {
+                        newItems.forEach(item => {
+                            grid.appendChild(item);
+                            
+                            const lazyImgs = item.querySelectorAll('img.lazy');
+                            lazyImgs.forEach(img => {
+                                setupLazyLoadForElement(img);
+                            });
+                        });
+                    }
+                    
+                    const newPagination = doc.getElementById('index-pagination');
+                    if (newPagination) {
+                        indexPagination.innerHTML = newPagination.innerHTML;
+                    } else {
+                        indexPagination.innerHTML = '';
+                    }
+                    
+                    const hasNext = indexPagination.querySelector('.next a') || indexPagination.querySelector('a.next');
+                    if (!hasNext) {
+                        scrollStatus.classList.remove('active');
+                        if (pageEndTip) pageEndTip.style.display = 'block';
+                    } else {
+                        scrollStatus.classList.remove('active');
+                    }
+                    
+                    isLoading = false;
+                })
+                .catch(err => {
+                    console.error('Failed to load more posts:', err);
+                    isLoading = false;
+                    scrollStatus.classList.remove('active');
+                });
+        }
+    }
+
+    // === 7. 图片版权防盗保护 (防右键、防拖拽与专属毛玻璃版权弹窗) ===
+    <?php if ($this->options->showCopyrightProtect == '1'): ?>
+    const copyrightToast = document.getElementById('copyright-toast');
+    let copyrightTimeout;
+    
+    function showCopyrightToast() {
+        if (!copyrightToast) return;
+        copyrightToast.classList.add('show');
+        clearTimeout(copyrightTimeout);
+        copyrightTimeout = setTimeout(() => {
+            copyrightToast.classList.remove('show');
+        }, 2500);
+    }
+    
+    document.addEventListener('contextmenu', function(e) {
+        if (e.target.tagName === 'IMG' || e.target.closest('.card-img-wrapper') || e.target.closest('.lightbox-content')) {
+            e.preventDefault();
+            showCopyrightToast();
+        }
+    });
+    
+    document.addEventListener('dragstart', function(e) {
+        if (e.target.tagName === 'IMG' || e.target.closest('.card-img-wrapper') || e.target.closest('.lightbox-content')) {
+            e.preventDefault();
+            showCopyrightToast();
+        }
+    });
+    <?php endif; ?>
 });
 </script>
 </body>

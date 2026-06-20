@@ -75,6 +75,36 @@ function themeConfig($form) {
 留空则默认使用内置的 20 张经典摄影名作并随机循环。')
     );
     $form->addInput($customHeroSlides);
+
+    // 是否开启图片版权防盗保护
+    $showCopyrightProtect = new Typecho_Widget_Helper_Form_Element_Radio(
+        'showCopyrightProtect',
+        array('1' => _t('开启'), '0' => _t('关闭')),
+        '0',
+        _t('是否开启图片版权防盗保护'),
+        _t('开启后将一键禁用前台所有图片的右键保存和拖拽，当用户尝试操作时展示专属毛玻璃版权弹窗提示。')
+    );
+    $form->addInput($showCopyrightProtect);
+
+    // 自定义版权提示文字
+    $copyrightNotice = new Typecho_Widget_Helper_Form_Element_Text(
+        'copyrightNotice',
+        NULL,
+        _t('RK 版权所有，未经授权请勿转载或保存图片。'),
+        _t('自定义版权提示文字'),
+        _t('当开启版权保护时，用户尝试右键保存或拖拽图片时显示的提示文字。')
+    );
+    $form->addInput($copyrightNotice);
+
+    // 首页每次加载的文章数量（配合滚动无限加载）
+    $indexPageSize = new Typecho_Widget_Helper_Form_Element_Text(
+        'indexPageSize',
+        NULL,
+        _t('12'),
+        _t('首页每次加载文章数量'),
+        _t('配合滚动无限加载。数值不宜过大，推荐为 12 或 16，以确保首屏加载极致速度。')
+    );
+    $form->addInput($indexPageSize);
 }
 
 function get_post_image($archive) {
@@ -184,7 +214,9 @@ function is_chinese($str) {
  */
 function themeInit($archive) {
     if ($archive->is('index')) {
-        $archive->parameter->pageSize = 9999;
+        $options = Helper::options();
+        $pageSize = (isset($options->indexPageSize) && is_numeric(trim($options->indexPageSize))) ? intval(trim($options->indexPageSize)) : 12;
+        $archive->parameter->pageSize = $pageSize;
     }
     
     // 监听获取大师幻灯片的 API 请求
